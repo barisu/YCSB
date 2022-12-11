@@ -48,20 +48,34 @@ public class RocksDBClient extends DB {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(RocksDBClient.class);
 
+  // このGuardedByってのもなんぞや
+  // これも同時実行制御用のフラグらしい
   @GuardedBy("RocksDBClient.class") private static Path rocksDbDir = null;
   @GuardedBy("RocksDBClient.class") private static Path optionsFile = null;
   @GuardedBy("RocksDBClient.class") private static RocksObject dbOptions = null;
   @GuardedBy("RocksDBClient.class") private static RocksDB rocksDb = null;
   @GuardedBy("RocksDBClient.class") private static int references = 0;
+  @GuardedBy("RocksDBClient.class") private static long startTime;
+  @GuardedBy("RocksDBClient.class") private static Statistics stats;
 
   private static final ConcurrentMap<String, ColumnFamily> COLUMN_FAMILIES = new ConcurrentHashMap<>();
   private static final ConcurrentMap<String, Lock> COLUMN_FAMILY_LOCKS = new ConcurrentHashMap<>();
 
   @Override
   public void init() throws DBException {
+    // synchronizedってなんぞや
+    // 普通に並列処理用の修飾子だった
+    // RocksDBClient.class
     synchronized(RocksDBClient.class) {
       if(rocksDb == null) {
         rocksDbDir = Paths.get(getProperties().getProperty(PROPERTY_ROCKSDB_DIR));
+
+        startTime = System.currentTimeMillis();
+        // System.out.println("\n\n\n\n");
+        // // System.out.println(cfDescriptors.size());
+        // System.out.println(rocksDbDir.toString());
+        // System.out.println("\n\n\n\n");        
+
         LOGGER.info("RocksDB data dir: " + rocksDbDir);
 
         String optionsFileString = getProperties().getProperty(PROPERTY_ROCKSDB_OPTIONS_FILE);
@@ -72,6 +86,13 @@ public class RocksDBClient extends DB {
 
         try {
           if (optionsFile != null) {
+
+
+            // System.out.println("\n\n\n\n");
+            // System.out.println("here!");
+            // System.out.println("\n\n\n\n");
+
+
             rocksDb = initRocksDBWithOptionsFile();
           } else {
             rocksDb = initRocksDB();
@@ -92,6 +113,7 @@ public class RocksDBClient extends DB {
    *
    * @return The initialized and open RocksDB instance.
    */
+  // オプションがある場合のやつ
   private RocksDB initRocksDBWithOptionsFile() throws IOException, RocksDBException {
     if(!Files.exists(rocksDbDir)) {
       Files.createDirectories(rocksDbDir);
@@ -105,7 +127,16 @@ public class RocksDBClient extends DB {
     OptionsUtil.loadOptionsFromFile(optionsFile.toAbsolutePath().toString(), Env.getDefault(), options, cfDescriptors);
     dbOptions = options;
 
+    stats = new Statistics();
+    stats.setStatsLevel(StatsLevel.ALL);
+
+    options.setStatistics(stats);
+
     final RocksDB db = RocksDB.open(options, rocksDbDir.toAbsolutePath().toString(), cfDescriptors, cfHandles);
+
+    // System.out.println("\n\n\n\n");
+    // System.out.println(cfDescriptors.size());
+    // System.out.println("\n\n\n\n");
 
     for(int i = 0; i < cfDescriptors.size(); i++) {
       String cfName = new String(cfDescriptors.get(i).getName());
@@ -145,7 +176,12 @@ public class RocksDBClient extends DB {
       cfDescriptors.add(cfDescriptor);
     }
 
+    // なんかここでスレッド数制限しているっぽいぞ
     final int rocksThreads = Runtime.getRuntime().availableProcessors() * 2;
+
+    // 統計情報用のオプションを追加する
+    Statistics statistics = new Statistics();
+    statistics.setStatsLevel(StatsLevel.ALL);
 
     if(cfDescriptors.isEmpty()) {
       final Options options = new Options()
@@ -153,8 +189,9 @@ public class RocksDBClient extends DB {
           .setCreateIfMissing(true)
           .setCreateMissingColumnFamilies(true)
           .setIncreaseParallelism(rocksThreads)
-          .setMaxBackgroundCompactions(rocksThreads)
-          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
+          .setMaxBackgroundCompactions(rocksThreads) // スレッド数変更されてて草
+          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
+          .setStatistics(statistics);
       dbOptions = options;
       return RocksDB.open(options, rocksDbDir.toAbsolutePath().toString());
     } else {
@@ -162,8 +199,9 @@ public class RocksDBClient extends DB {
           .setCreateIfMissing(true)
           .setCreateMissingColumnFamilies(true)
           .setIncreaseParallelism(rocksThreads)
-          .setMaxBackgroundCompactions(rocksThreads)
-          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
+          .setMaxBackgroundCompactions(rocksThreads) // スレッド数変更されてて草
+          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
+          .setStatistics(statistics);
       dbOptions = options;
 
       final List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
@@ -177,6 +215,8 @@ public class RocksDBClient extends DB {
 
   @Override
   public void cleanup() throws DBException {
+    // ここで修了処理をしている
+    // LOGファイルへの統計情報吐き出しを待って修了することとかできないかなぁ
     super.cleanup();
 
     synchronized (RocksDBClient.class) {
@@ -185,6 +225,9 @@ public class RocksDBClient extends DB {
           for (final ColumnFamily cf : COLUMN_FAMILIES.values()) {
             cf.getHandle().close();
           }
+
+          // 統計情報の出力
+          System.out.println(stats.toString());
 
           rocksDb.close();
           rocksDb = null;
