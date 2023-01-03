@@ -180,20 +180,19 @@ public class RocksDBClient extends DB {
     // 普通に環境における最大量だった
     final int rocksThreads = Runtime.getRuntime().availableProcessors() * 2;
 
-      // 統計情報用のオプションを追加する
-      stats = new Statistics();
-      stats.setStatsLevel(StatsLevel.ALL);
-    
-
     if(cfDescriptors.isEmpty()) {
-      final Options options = new Options()
+      Options options = new Options()
           .optimizeLevelStyleCompaction()
           .setCreateIfMissing(true)
           .setCreateMissingColumnFamilies(true)
           .setIncreaseParallelism(rocksThreads)
           .setMaxBackgroundCompactions(rocksThreads) // スレッド数変更されてて草
-          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
-          .setStatistics(stats);
+          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
+      
+      stats = new Statistics();
+      stats.setStatsLevel(StatsLevel.ALL);
+      
+      options.setStatistics(stats);
       dbOptions = options;
 
       return RocksDB.open(options, rocksDbDir.toAbsolutePath().toString());      
@@ -205,6 +204,10 @@ public class RocksDBClient extends DB {
           .setMaxBackgroundCompactions(rocksThreads) 
           .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
           .setStatistics(stats);
+
+      stats = new Statistics();
+      stats.setStatsLevel(StatsLevel.ALL);
+      options.setStatistics(stats);
 
       dbOptions = options;
 
