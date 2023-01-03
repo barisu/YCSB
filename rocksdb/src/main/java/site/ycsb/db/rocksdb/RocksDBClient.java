@@ -177,11 +177,13 @@ public class RocksDBClient extends DB {
     }
 
     // なんかここでスレッド数制限しているっぽいぞ
+    // 普通に環境における最大量だった
     final int rocksThreads = Runtime.getRuntime().availableProcessors() * 2;
 
-    // 統計情報用のオプションを追加する
-    Statistics statistics = new Statistics();
-    statistics.setStatsLevel(StatsLevel.ALL);
+      // 統計情報用のオプションを追加する
+      stats = new Statistics();
+      stats.setStatsLevel(StatsLevel.ALL);
+    
 
     if(cfDescriptors.isEmpty()) {
       final Options options = new Options()
@@ -191,17 +193,19 @@ public class RocksDBClient extends DB {
           .setIncreaseParallelism(rocksThreads)
           .setMaxBackgroundCompactions(rocksThreads) // スレッド数変更されてて草
           .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
-          .setStatistics(statistics);
+          .setStatistics(stats);
       dbOptions = options;
-      return RocksDB.open(options, rocksDbDir.toAbsolutePath().toString());
+
+      return RocksDB.open(options, rocksDbDir.toAbsolutePath().toString());      
     } else {
       final DBOptions options = new DBOptions()
           .setCreateIfMissing(true)
           .setCreateMissingColumnFamilies(true)
           .setIncreaseParallelism(rocksThreads)
-          .setMaxBackgroundCompactions(rocksThreads) // スレッド数変更されてて草
+          .setMaxBackgroundCompactions(rocksThreads) 
           .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
-          .setStatistics(statistics);
+          .setStatistics(stats);
+
       dbOptions = options;
 
       final List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
