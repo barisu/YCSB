@@ -202,8 +202,7 @@ public class RocksDBClient extends DB {
           .setCreateMissingColumnFamilies(true)
           .setIncreaseParallelism(rocksThreads)
           .setMaxBackgroundCompactions(rocksThreads) 
-          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL)
-          .setStatistics(stats);
+          .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
 
       stats = new Statistics();
       stats.setStatsLevel(StatsLevel.ALL);
