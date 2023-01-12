@@ -235,6 +235,9 @@ public class RocksDBClient extends DB {
           // 統計情報の出力
           System.out.println(stats.toString());
 
+          stats.close();
+          stats = null;
+
           rocksDb.close();
           rocksDb = null;
 
